@@ -2,6 +2,7 @@ import { configureStore } from "@reduxjs/toolkit";
 import createSagaMiddleware from "redux-saga";
 import localConfigsReducer from "./features/local-configs/local-configs";
 import commonReducer from "./features/common/common";
+import logsReducer from "./features/logs/logs";
 import appSaga from "./saga/app-saga";
 
 const sagaMiddleware = createSagaMiddleware();
@@ -10,6 +11,7 @@ const store = configureStore({
   reducer: {
     localConfigs: localConfigsReducer,
     common: commonReducer,
+    logs: logsReducer
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(sagaMiddleware),

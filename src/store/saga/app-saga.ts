@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api";
-import { UnlistenFn, emit, listen } from "@tauri-apps/api/event";
-import { call, put, takeLatest } from "redux-saga/effects";
+import { listen } from "@tauri-apps/api/event";
+import { call, fork, put, take, takeLatest } from "redux-saga/effects";
+import { channel } from "redux-saga";
 import {
   invokeRemoveConfiguration,
   invokeImportConfiguration,
@@ -17,6 +18,9 @@ import {
   initializeConfigs,
   initializeSessions,
 } from "../features/local-configs/local-configs";
+import { Log, addLog } from "../features/logs/logs";
+
+const logsChannel = channel();
 
 function* init() {
   const configs: Config[] = yield call(invoke, "get_openvpn3_configs");
@@ -30,9 +34,9 @@ function* init() {
 }
 
 function* registerEvents() {
-  const unlisten = (yield call(listen, "log", (event) => {
-    console.log(event);
-  })) as UnlistenFn;
+  yield call(listen<Log>, "log", (event) => {
+    logsChannel.put(event.payload);
+  });
 }
 
 function* handleInvokeSelectFile() {
@@ -102,7 +106,16 @@ function* handleInvokeConnectSession(
   yield init();
 }
 
+function* watchLogs() {
+  while (true) {
+    const log: Log = yield take(logsChannel);
+    yield put(addLog(log));
+  }
+}
+
 function* appSaga() {
+  yield fork(watchLogs);
+
   yield registerEvents();
   yield init();
 

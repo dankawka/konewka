@@ -18,13 +18,17 @@
       },
       "dialog": {
         "open": true
+      },
+      "window": {
+        "setResizable": false
       }
     },
     "windows": [
       {
         "title": "konewka",
-        "width": 800,
-        "height": 600
+        "width": 1024,
+        "height": 768,
+        "resizable": false
       }
     ],
     "security": {
@@ -41,6 +45,10 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ]
+    },
+    "systemTray": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true
     }
   }
 }

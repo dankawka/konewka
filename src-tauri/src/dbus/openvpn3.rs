@@ -113,9 +113,8 @@ impl OpenVPN3Dbus {
                     "Log",
                     ("group", "level", "message"),
                     (),
-                    |mut ctx, cr, (group, level, message): (u32, u32, String)| {
-                        println!("Incoming Log call: {} {} {}", group, level, message);
-                        async move { ctx.reply(Ok(())) }
+                    |mut ctx, cr, (group, level, message): (u32, u32, String)| async move {
+                        ctx.reply(Ok(()))
                     },
                 );
 
@@ -123,9 +122,8 @@ impl OpenVPN3Dbus {
                     "StatusChange",
                     ("group", "level", "message"),
                     (),
-                    |mut ctx, cr, (group, level, message): (u32, u32, String)| {
-                        println!("Incoming Log call: {} {} {}", group, level, message);
-                        async move { ctx.reply(Ok(())) }
+                    |mut ctx, cr, (group, level, message): (u32, u32, String)| async move {
+                        ctx.reply(Ok(()))
                     },
                 );
 
@@ -133,9 +131,8 @@ impl OpenVPN3Dbus {
                     "AttentionRequired",
                     ("group", "level", "message"),
                     (),
-                    |mut ctx, cr, (group, level, message): (u32, u32, String)| {
-                        println!("Incoming Log call: {} {} {}", group, level, message);
-                        async move { ctx.reply(Ok(())) }
+                    |mut ctx, cr, (group, level, message): (u32, u32, String)| async move {
+                        ctx.reply(Ok(()))
                     },
                 );
             });
@@ -192,7 +189,19 @@ impl OpenVPN3Dbus {
                 let member = member.as_str().unwrap().to_string();
 
                 let (first_code, second_code, message) = v.1;
-                match tx.send((member, first_code, second_code, message)) {
+                let payload = (member.clone(), first_code, second_code, message.clone());
+
+                let cmember = member.clone();
+                if cmember == "StatusChange" && first_code == 3 && second_code == 22 {
+                    match open::that(message) {
+                        Ok(_) => (),
+                        Err(_) => {
+                            println!("Failed to open link");
+                        }
+                    }
+                }
+
+                match tx.send(payload) {
                     Ok(_) => (),
                     Err(_) => {
                         println!("Failed to send signal");

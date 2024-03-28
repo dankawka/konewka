@@ -18,6 +18,9 @@ import {
   Tr,
   Flex,
   Box,
+  Text,
+  VStack,
+  Textarea,
 } from "@chakra-ui/react";
 import { useDispatch, useSelector } from "react-redux";
 import { SubmitHandler, useForm } from "react-hook-form";
@@ -37,6 +40,7 @@ import {
   getAllSessions,
 } from "./store/features/local-configs/local-configs";
 import { ImportConfigurationPayload } from "./common/types";
+import { getLogs } from "./store/features/logs/logs";
 
 const ImportConfigurationForm = () => {
   const dispatch = useDispatch();
@@ -99,11 +103,11 @@ const ConfigurationsList = () => {
 
   return (
     <TableContainer>
-      <Table variant="simple">
+      <Table layout={"fixed"} size="sm" variant="simple">
         <TableCaption>Imported configurations</TableCaption>
         <Thead>
           <Tr>
-            <Th>Path</Th>
+            <Th w={400}>Path</Th>
             <Th>Name</Th>
             <Th>Use count</Th>
             <Th>Actions</Th>
@@ -112,7 +116,15 @@ const ConfigurationsList = () => {
         <Tbody>
           {configs.map((config) => (
             <Tr key={config.path}>
-              <Td>{config.path}</Td>
+              <Td>
+                <Text
+                  overflow="hidden"
+                  textOverflow={"ellipsis"}
+                  whiteSpace={"nowrap"}
+                >
+                  {config.path}
+                </Text>
+              </Td>
               <Td>{config.name}</Td>
               <Td>{config.used_count}</Td>
               <Td>
@@ -147,7 +159,7 @@ const SessionsList = () => {
 
   return (
     <TableContainer>
-      <Table variant="simple">
+      <Table size="sm" variant="simple">
         <TableCaption>Active sessions</TableCaption>
         <Thead>
           <Tr>
@@ -157,10 +169,14 @@ const SessionsList = () => {
         <Tbody>
           {sessions.map((session) => (
             <Tr key={session.path}>
-              <Td>{session.path}</Td>
+              <Td>
+                <Text overflow={"ellipsis"} whiteSpace={"nowrap"}>
+                  {session.path}
+                </Text>
+              </Td>
               <Td>
                 <HStack spacing="6px">
-                <IconButton
+                  <IconButton
                     onClick={() => {
                       dispatch(invokeConnectSession(session.path));
                     }}
@@ -184,19 +200,32 @@ const SessionsList = () => {
   );
 };
 
+const Logs = () => {
+  const logs = useSelector(getLogs);
+  const asText = logs.map((log) => `${log.member} - ${log.first_flag} - ${log.second_flag} - ${log.message}`).join("\n");
+  return <Textarea h={"100%"} defaultValue={asText} placeholder="Logs will be here" />;
+};
+
 const App = () => {
   return (
-    <Box marginLeft="12px" marginRight="12px" marginTop="12px">
-      <Flex>
-        <Box flex="1">
-          <ImportConfigurationForm />
-        </Box>
-        <Box flex="2" marginLeft='6px'>
-          <ConfigurationsList />
-          <SessionsList />
-        </Box>
-      </Flex>
-    </Box>
+    <Flex justifyItems={"stretch"} direction={"column"} h={"100%"}>
+      <Box flex={2} margin="12px">
+        <Flex>
+          <Box flex="1">
+            <ImportConfigurationForm />
+          </Box>
+          <Box flex="2" marginLeft="6px" minW={0}>
+            <Flex direction={"column"}>
+              <ConfigurationsList />
+              <SessionsList />
+            </Flex>
+          </Box>
+        </Flex>
+      </Box>
+      <Box marginLeft="12px" marginRight="12px" marginBottom="12px" flex={1}>
+        <Logs />
+      </Box>
+    </Flex>
   );
 };
 

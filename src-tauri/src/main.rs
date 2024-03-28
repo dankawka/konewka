@@ -5,7 +5,7 @@ use std::{clone, sync::Arc};
 
 use dbus::openvpn3::{OpenVPN3Config, OpenVPN3Dbus};
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
+use tauri::{CustomMenuItem, Manager, SystemTray, SystemTrayMenu, SystemTrayMenuItem};
 mod dbus;
 
 struct MyState(Arc<OpenVPN3Dbus>);
@@ -182,6 +182,14 @@ struct LogMessage {
 
 #[tokio::main]
 async fn main() {
+    let quit = CustomMenuItem::new("quit".to_string(), "Quit");
+    let hide = CustomMenuItem::new("hide".to_string(), "Hide");
+    let tray_menu = SystemTrayMenu::new()
+        .add_item(quit)
+        .add_native_item(SystemTrayMenuItem::Separator)
+        .add_item(hide);
+    let tray = SystemTray::new().with_menu(tray_menu);
+
     let openvpn3 = Arc::new(dbus::openvpn3::OpenVPN3Dbus::new().unwrap());
 
     match openvpn3.signals().await {
@@ -192,7 +200,7 @@ async fn main() {
         }
     }
 
-    let clone = openvpn3.clone();
+    let openvpn3_logger = openvpn3.clone();
 
     tauri::Builder::default()
         .manage(MyState(openvpn3))
@@ -205,7 +213,7 @@ async fn main() {
 
             let main_window = app.get_window("main").unwrap();
 
-            clone.on_log(move |member, group, level, message| {
+            openvpn3_logger.on_log(move |member, group, level, message| {
                 let message = LogMessage {
                     member: member,
                     first_flag: group,
@@ -217,6 +225,7 @@ async fn main() {
 
             Ok(())
         })
+        .system_tray(tray)
         .invoke_handler(tauri::generate_handler![
             get_openvpn3_configs,
             select_file,
