@@ -3,6 +3,8 @@ konewka is a user-friendly GUI application crafted in Rust utilizing the Tauri f
 
 It communicates with [openvpn3-linux](https://github.com/OpenVPN/openvpn3-linux) via dbus.
 
+![Example image](./images/example.png)
+
 ## Features
 * Importing .ovpn configuration files
 * Removing imported configurations

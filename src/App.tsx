@@ -19,7 +19,6 @@ import {
   Flex,
   Box,
   Text,
-  VStack,
   Textarea,
 } from "@chakra-ui/react";
 import { useDispatch, useSelector } from "react-redux";
@@ -107,7 +106,7 @@ const ConfigurationsList = () => {
         <TableCaption>Imported configurations</TableCaption>
         <Thead>
           <Tr>
-            <Th w={400}>Path</Th>
+            <Th w={350}>Path</Th>
             <Th>Name</Th>
             <Th>Use count</Th>
             <Th>Actions</Th>
