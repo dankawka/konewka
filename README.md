@@ -1,7 +1,16 @@
-# Tauri + React + Typescript
+# konewka
+konewka is a user-friendly GUI application crafted in Rust utilizing the Tauri framework. Designed specifically for Linux systems, Konewka serves as a convenient graphical wrapper over OpenVPN3, empowering users to effortlessly manage their VPN configurations and sessions with ease.
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+It communicates with [openvpn3-linux](https://github.com/OpenVPN/openvpn3-linux) via dbus.
 
-## Recommended IDE Setup
+## Features
+* Importing .ovpn configuration files
+* Removing imported configurations
+* Starting tunnels (sessions)
+* Connecting and disconnecting sessions
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+# Contributions
+Contributions to Konewka are highly encouraged and welcomed! Whether you spot a bug, have an enhancement in mind, or want to contribute code, feel free to open an issue or submit a pull request.
+
+# License
+Konewka is licensed under the MIT License. See the LICENSE file for more details.
