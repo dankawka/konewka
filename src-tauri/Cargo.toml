@@ -1,0 +1,30 @@
+[package]
+name = "konewka"
+version = "0.0.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+tauri-build = { version = "1", features = [] }
+
+[dependencies]
+tauri = { version = "1", features = [ "dialog-open", "shell-open"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dbus = "0.9.7"
+dbus-tokio = "0.7.6"
+tokio = { version = "1", features = ["full"] }
+backon = "0.4.3"
+anyhow = "1.0.81"
+tauri-api = "0.7.6"
+tokio-stream = "0.1.15"
+futures-channel = "0.3.30"
+dbus-crossroads = "0.5.2"
+futures = "0.3.30"
+
+[features]
+# This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]
