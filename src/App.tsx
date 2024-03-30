@@ -19,7 +19,6 @@ import {
   Flex,
   Box,
   Text,
-  Textarea,
 } from "@chakra-ui/react";
 import { useDispatch, useSelector } from "react-redux";
 import { SubmitHandler, useForm } from "react-hook-form";
@@ -39,7 +38,7 @@ import {
   getAllSessions,
 } from "./store/features/local-configs/local-configs";
 import { ImportConfigurationPayload } from "./common/types";
-import { getLogs } from "./store/features/logs/logs";
+import { LogsContainer } from "./components/Logs";
 
 const ImportConfigurationForm = () => {
   const dispatch = useDispatch();
@@ -130,17 +129,17 @@ const ConfigurationsList = () => {
                 <HStack spacing="6px">
                   <IconButton
                     onClick={() => {
-                      dispatch(invokeRemoveConfiguration(config.path));
-                    }}
-                    aria-label="Search database"
-                    icon={<DeleteIcon />}
-                  />
-                  <IconButton
-                    onClick={() => {
                       dispatch(invokeNewTunnel(config.path));
                     }}
                     aria-label="Search database"
                     icon={<LinkIcon />}
+                  />
+                  <IconButton
+                    onClick={() => {
+                      dispatch(invokeRemoveConfiguration(config.path));
+                    }}
+                    aria-label="Search database"
+                    icon={<DeleteIcon />}
                   />
                 </HStack>
               </Td>
@@ -199,12 +198,6 @@ const SessionsList = () => {
   );
 };
 
-const Logs = () => {
-  const logs = useSelector(getLogs);
-  const asText = logs.map((log) => `${log.member} - ${log.first_flag} - ${log.second_flag} - ${log.message}`).join("\n");
-  return <Textarea h={"100%"} defaultValue={asText} placeholder="Logs will be here" />;
-};
-
 const App = () => {
   return (
     <Flex justifyItems={"stretch"} direction={"column"} h={"100%"}>
@@ -221,8 +214,8 @@ const App = () => {
           </Box>
         </Flex>
       </Box>
-      <Box marginLeft="12px" marginRight="12px" marginBottom="12px" flex={1}>
-        <Logs />
+      <Box minH={0} marginLeft="12px" marginRight="12px" marginBottom="12px" flex={1}>
+        <LogsContainer />
       </Box>
     </Flex>
   );

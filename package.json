@@ -1,13 +1,13 @@
 {
   "name": "konewka",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "cross-env WEBKIT_DISABLE_COMPOSITING_MODE=1 tauri"
+    "tauri": "cross-env NO_STRIP=true WEBKIT_DISABLE_COMPOSITING_MODE=1 tauri"
   },
   "dependencies": {
     "@chakra-ui/icons": "^2.1.1",
@@ -16,6 +16,7 @@
     "@emotion/styled": "^11.11.0",
     "@redux-devtools/remote": "^0.9.1",
     "@reduxjs/toolkit": "^2.2.2",
+    "@tanstack/react-virtual": "^3.2.0",
     "@tauri-apps/api": "^1",
     "framer-motion": "^11.0.20",
     "react": "^18.2.0",

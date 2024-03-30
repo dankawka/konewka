@@ -184,6 +184,7 @@ impl OpenVPN3Dbus {
             ) = signal_match.stream();
 
             while let Some(v) = stream.next().await {
+                println!("Signal received: {:?} {:?}", v.1, v.0);
                 let message = v.0;
                 let member = message.member().unwrap().into_static();
                 let member = member.as_str().unwrap().to_string();
