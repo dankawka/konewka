@@ -54,9 +54,7 @@ pub struct OpenVPN3Config {
     pub used_count: u32,
 }
 
-struct Hello {
-    called_count: u32,
-}
+struct State {}
 
 impl OpenVPN3Dbus {
     pub fn new() -> Result<Self, Box<dyn Error>> {
@@ -139,7 +137,7 @@ impl OpenVPN3Dbus {
 
             // Let's add the "/hello" path, which implements the com.example.dbustest interface,
             // to the crossroads instance.
-            cr.insert(path, &[iface_token], Hello { called_count: 0 });
+            cr.insert(path, &[iface_token], State {});
 
             println!("Server is ready to accept method calls.");
 
