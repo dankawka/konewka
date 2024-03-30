@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{clone, sync::Arc};
+use std::{sync::Arc};
 
 use dbus::openvpn3::{OpenVPN3Config, OpenVPN3Dbus};
 use serde::{Deserialize, Serialize};
@@ -50,7 +50,7 @@ fn select_file() -> Result<String, String> {
                 return Err("Invalid file selection".to_string());
             }
         },
-        Err(error) => {
+        Err(_error) => {
             return Ok("".to_string());
         }
     }
@@ -134,7 +134,7 @@ async fn remove_config<'a>(payload: String, state: tauri::State<'a, MyState>) ->
 async fn new_tunnel<'a>(payload: String, state: tauri::State<'a, MyState>) -> Result<String, ()> {
     let session_path = match state.0.new_tunnel(payload.clone()).await {
         Ok(session_path) => session_path,
-        Err(error) => {
+        Err(_error) => {
             println!("Failed to create new tunnel");
             return Ok("".to_string());
         }

@@ -93,7 +93,7 @@ impl OpenVPN3Dbus {
     async fn server_status(&self, path: String) -> Result<(), Box<dyn Error + Send>> {
         let conn = self.connection.clone();
 
-        let handle = tokio::spawn(async move {
+        let _handle = tokio::spawn(async move {
             // Create a new crossroads instance.
             // The instance is configured so that introspection and properties interfaces
             // are added by default on object path additions.
@@ -113,7 +113,7 @@ impl OpenVPN3Dbus {
                     "Log",
                     ("group", "level", "message"),
                     (),
-                    |mut ctx, cr, (group, level, message): (u32, u32, String)| async move {
+                    |mut ctx, _cr, (_group, _level, _message): (u32, u32, String)| async move {
                         ctx.reply(Ok(()))
                     },
                 );
@@ -122,7 +122,7 @@ impl OpenVPN3Dbus {
                     "StatusChange",
                     ("group", "level", "message"),
                     (),
-                    |mut ctx, cr, (group, level, message): (u32, u32, String)| async move {
+                    |mut ctx, _cr, (_group, _level, _message): (u32, u32, String)| async move {
                         ctx.reply(Ok(()))
                     },
                 );
@@ -131,7 +131,7 @@ impl OpenVPN3Dbus {
                     "AttentionRequired",
                     ("group", "level", "message"),
                     (),
-                    |mut ctx, cr, (group, level, message): (u32, u32, String)| async move {
+                    |mut ctx, _cr, (_group, _level, _message): (u32, u32, String)| async move {
                         ctx.reply(Ok(()))
                     },
                 );
@@ -178,7 +178,7 @@ impl OpenVPN3Dbus {
 
             println!("Listening for signals...");
 
-            let (incoming_signal, mut stream): (
+            let (_incoming_signal, mut stream): (
                 dbus::nonblock::MsgMatch,
                 futures_channel::mpsc::UnboundedReceiver<(_, (u32, u32, String))>,
             ) = signal_match.stream();
