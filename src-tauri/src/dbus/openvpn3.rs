@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use dbus::arg::RefArg;
 use dbus::message::MatchRule;
 use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
@@ -7,36 +7,12 @@ use dbus::nonblock::{self};
 use dbus::Path;
 use dbus_tokio::connection;
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::sync::Arc;
 use std::{error::Error, time::Duration};
 use tokio::sync::{broadcast, Mutex};
 use tokio_stream::StreamExt;
 
 use crate::ImportConfigPayload;
-
-// Define a custom error type
-#[derive(Debug)]
-struct MyError {
-    message: String,
-}
-
-// Implement the Error trait for the custom error type
-impl Error for MyError {}
-
-// Implement the Display trait to provide a human-readable description
-impl fmt::Display for MyError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-// Implement the From trait to convert the custom error type into Box<dyn Error + Send>
-impl From<MyError> for Box<dyn Error + Send> {
-    fn from(err: MyError) -> Self {
-        Box::new(err)
-    }
-}
 
 pub struct OpenVPN3Dbus {
     connection: Arc<SyncConnection>,
@@ -60,7 +36,7 @@ pub struct OpenVPN3Session {
 }
 
 impl OpenVPN3Dbus {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
+    pub fn new() -> Result<Self, anyhow::Error> {
         let (resource, conn) = connection::new_system_sync()?;
 
         let _handle = tokio::spawn(async {
@@ -90,7 +66,7 @@ impl OpenVPN3Dbus {
         });
     }
 
-    pub async fn signals(&self) -> Result<(), Box<dyn Error + Send>> {
+    pub async fn signals(&self) -> Result<(), anyhow::Error> {
         let conn = self.connection.clone();
         let tx = self.log_sender.clone();
 
@@ -99,13 +75,7 @@ impl OpenVPN3Dbus {
                 .with_interface("net.openvpn.v3.backends")
                 .with_type(dbus::MessageType::Signal);
 
-            let signal_match = conn
-                .add_match(match_rule)
-                .await
-                .map_err(|_| MyError {
-                    message: "Failed to add match rule".to_string(),
-                })
-                .unwrap();
+            let signal_match = conn.add_match(match_rule).await.unwrap();
 
             println!("Listening for signals...");
 
@@ -144,7 +114,7 @@ impl OpenVPN3Dbus {
         Ok(())
     }
 
-    pub async fn remove_config(&self, config_path: String) -> Result<(), Box<dyn Error + Send>> {
+    pub async fn remove_config(&self, config_path: String) -> Result<(), anyhow::Error> {
         let conn = self.connection.clone();
 
         let proxy = nonblock::Proxy::new(
@@ -157,14 +127,12 @@ impl OpenVPN3Dbus {
         proxy
             .method_call("net.openvpn.v3.configuration", "Remove", ())
             .await
-            .map_err(|_| MyError {
-                message: "Failed to remove config".to_string(),
-            })?;
+            .with_context(|| "Failed to remove config")?;
 
         Ok(())
     }
 
-    pub async fn new_tunnel(&self, config_path: String) -> Result<String, Box<dyn Error + Send>> {
+    pub async fn new_tunnel(&self, config_path: String) -> Result<String, anyhow::Error> {
         let conn = self.connection.clone();
 
         let proxy = nonblock::Proxy::new(
@@ -181,12 +149,7 @@ impl OpenVPN3Dbus {
                 (dbus::Path::new(config_path).unwrap(),),
             )
             .await
-            .map_err(|e| {
-                println!("Error: {:?}", e);
-                return MyError {
-                    message: "Failed to start tunnel".to_string(),
-                };
-            })?;
+            .with_context(|| "Failed to create new tunnel")?;
 
         let session_conn = self.connection.clone();
         let proxy_session = nonblock::Proxy::new(
@@ -206,9 +169,7 @@ impl OpenVPN3Dbus {
                 loop {
                     println!("Failed to ready session, retrying...");
                     if retry == 3 {
-                        return Err(Box::new(MyError {
-                            message: "Failed to start tunnel".to_string(),
-                        }));
+                        return Err(anyhow::Error::msg("Failed to ready session"));
                     }
                     match proxy_session
                         .method_call("net.openvpn.v3.sessions", "Ready", ())
@@ -265,10 +226,7 @@ impl OpenVPN3Dbus {
         Ok(session_path_as_string)
     }
 
-    async fn fetch_config_data(
-        &self,
-        config_path: &str,
-    ) -> Result<(String, u32), Box<dyn Error + Send>> {
+    async fn fetch_config_data(&self, config_path: &str) -> Result<(String, u32), anyhow::Error> {
         let conn = self.connection.clone();
 
         let proxy = nonblock::Proxy::new(
@@ -281,21 +239,17 @@ impl OpenVPN3Dbus {
         let config_name: String = proxy
             .get("net.openvpn.v3.configuration", "name")
             .await
-            .map_err(|_| MyError {
-                message: "Failed to fetch config data".to_string(),
-            })?;
+            .with_context(|| "Failed to fetch config data")?;
 
         let used_count: u32 = proxy
             .get("net.openvpn.v3.configuration", "used_count")
             .await
-            .map_err(|_| MyError {
-                message: "Failed to fetch config data".to_string(),
-            })?;
+            .with_context(|| "Failed to fetch config data")?;
 
         Ok((config_name, used_count))
     }
 
-    pub async fn get_configs(&self) -> Result<Vec<OpenVPN3Config>, Box<dyn Error + Send>> {
+    pub async fn get_configs(&self) -> Result<Vec<OpenVPN3Config>, anyhow::Error> {
         let conn = self.connection.clone();
 
         let proxy = nonblock::Proxy::new(
@@ -308,9 +262,7 @@ impl OpenVPN3Dbus {
         let (configs_paths,): (Vec<Path>,) = proxy
             .method_call("net.openvpn.v3.configuration", "FetchAvailableConfigs", ())
             .await
-            .map_err(|_| MyError {
-                message: "Failed to fetch available configs".to_string(),
-            })?;
+            .with_context(|| "Failed to fetch available configs")?;
 
         let mut configs = vec![];
         for config in configs_paths.iter() {
@@ -329,7 +281,7 @@ impl OpenVPN3Dbus {
     pub async fn import_config(
         &self,
         payload: ImportConfigPayload,
-    ) -> Result<String, Box<dyn Error + Send>> {
+    ) -> Result<String, anyhow::Error> {
         let conn = self.connection.clone();
 
         let proxy = nonblock::Proxy::new(
@@ -341,9 +293,7 @@ impl OpenVPN3Dbus {
 
         // read config file from path
         let config_content =
-            std::fs::read_to_string(&payload.config_file).map_err(|_| MyError {
-                message: "Failed to read config file".to_string(),
-            })?;
+            std::fs::read_to_string(&payload.config_file).with_context(|| "Failed to read file")?;
 
         let (config_path,): (dbus::Path,) = proxy
             .method_call(
@@ -357,16 +307,14 @@ impl OpenVPN3Dbus {
                 ),
             )
             .await
-            .map_err(|_| MyError {
-                message: "Failed to import config".to_string(),
-            })?;
+            .with_context(|| "Failed to import config")?;
 
         let as_string = config_path.to_string();
 
         Ok(as_string)
     }
 
-    pub async fn get_sessions(&self) -> Result<Vec<OpenVPN3Session>, Box<dyn Error + Send>> {
+    pub async fn get_sessions(&self) -> Result<Vec<OpenVPN3Session>, anyhow::Error> {
         let conn = self.connection.clone();
 
         let proxy = nonblock::Proxy::new(
@@ -379,9 +327,7 @@ impl OpenVPN3Dbus {
         let (sessions,): (Vec<Path>,) = proxy
             .method_call("net.openvpn.v3.sessions", "FetchAvailableSessions", ())
             .await
-            .map_err(|_| MyError {
-                message: "Failed to fetch available sessions".to_string(),
-            })?;
+            .with_context(|| "Failed to fetch available sessions")?;
 
         let mut sessions_with_data: Vec<OpenVPN3Session> = vec![];
 
@@ -394,19 +340,25 @@ impl OpenVPN3Dbus {
                 session_conn,
             );
 
+            // Forward logs frome each session
+            if let Ok(()) = session_proxy
+                .method_call("net.openvpn.v3.sessions", "LogForward", (true,))
+                .await
+            {
+                println!("LogForwarded");
+            } else {
+                println!("Failed to forward logs");
+            }
+
             let (major_code, minor_code, status_message): (u32, u32, String) = session_proxy
                 .get("net.openvpn.v3.sessions", "status")
                 .await
-                .map_err(|_| MyError {
-                    message: "Failed to fetch session data".to_string(),
-                })?;
+                .with_context(|| "Failed to fetch session data")?;
 
             let session_created: u64 = session_proxy
                 .get("net.openvpn.v3.sessions", "session_created")
                 .await
-                .map_err(|_| MyError {
-                    message: "Failed to fetch session data".to_string(),
-                })?;
+                .with_context(|| "Failed to fetch session data")?;
 
             let session = OpenVPN3Session {
                 path: session.to_string(),
@@ -422,10 +374,7 @@ impl OpenVPN3Dbus {
         Ok(sessions_with_data)
     }
 
-    pub async fn disconnect_session(
-        &self,
-        session_path: String,
-    ) -> Result<(), Box<dyn Error + Send>> {
+    pub async fn disconnect_session(&self, session_path: String) -> Result<(), anyhow::Error> {
         let conn = self.connection.clone();
 
         let proxy = nonblock::Proxy::new(
@@ -438,17 +387,12 @@ impl OpenVPN3Dbus {
         proxy
             .method_call("net.openvpn.v3.sessions", "Disconnect", ())
             .await
-            .map_err(|error| {
-                println!("Failed to disconnect session: {:?}", error);
-                return MyError {
-                    message: "Failed to disconnect session".to_string(),
-                };
-            })?;
+            .with_context(|| "Failed to disconnect session")?;
 
         Ok(())
     }
 
-    pub async fn connect_session(&self, session_path: String) -> Result<(), Box<dyn Error + Send>> {
+    pub async fn connect_session(&self, session_path: String) -> Result<(), anyhow::Error> {
         let conn = self.connection.clone();
 
         let proxy = nonblock::Proxy::new(
@@ -461,9 +405,7 @@ impl OpenVPN3Dbus {
         proxy
             .method_call("net.openvpn.v3.sessions", "Connect", ())
             .await
-            .map_err(|_| MyError {
-                message: "Failed to connect session".to_string(),
-            })?;
+            .with_context(|| "Failed to connect session")?;
 
         Ok(())
     }
