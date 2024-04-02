@@ -1,14 +1,11 @@
 use anyhow::Result;
 use dbus::arg::RefArg;
-use dbus::channel::MatchingReceiver;
 use dbus::message::MatchRule;
 use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
 use dbus::nonblock::SyncConnection;
 use dbus::nonblock::{self};
 use dbus::Path;
-use dbus_crossroads::Crossroads;
 use dbus_tokio::connection;
-use futures::future;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
@@ -44,7 +41,6 @@ impl From<MyError> for Box<dyn Error + Send> {
 pub struct OpenVPN3Dbus {
     connection: Arc<SyncConnection>,
     log_sender: broadcast::Sender<(String, u32, u32, String)>,
-    log_receiver: broadcast::Receiver<(String, u32, u32, String)>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -54,7 +50,14 @@ pub struct OpenVPN3Config {
     pub used_count: u32,
 }
 
-struct State {}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct OpenVPN3Session {
+    pub path: String,
+    pub major_code: u32,
+    pub minor_code: u32,
+    pub status_message: String,
+    pub session_created: u64,
+}
 
 impl OpenVPN3Dbus {
     pub fn new() -> Result<Self, Box<dyn Error>> {
@@ -65,12 +68,11 @@ impl OpenVPN3Dbus {
             panic!("Lost connection to D-Bus: {}", err);
         });
 
-        let (tx_log, rx_log) = broadcast::channel::<(String, u32, u32, String)>(16);
+        let (tx_log, _) = broadcast::channel::<(String, u32, u32, String)>(16);
 
         Ok(Self {
             connection: conn,
             log_sender: tx_log,
-            log_receiver: rx_log,
         })
     }
 
@@ -86,75 +88,6 @@ impl OpenVPN3Dbus {
                 cb.lock().await(member, group, level, message);
             }
         });
-    }
-
-    async fn server_status(&self, path: String) -> Result<(), Box<dyn Error + Send>> {
-        let conn = self.connection.clone();
-
-        let _handle = tokio::spawn(async move {
-            // Create a new crossroads instance.
-            // The instance is configured so that introspection and properties interfaces
-            // are added by default on object path additions.
-            let mut cr = Crossroads::new();
-
-            // Enable async support for the crossroads instance.
-            cr.set_async_support(Some((
-                conn.clone(),
-                Box::new(|x| {
-                    tokio::spawn(x);
-                }),
-            )));
-
-            // Let's build a new interface, which can be used for "Hello" objects.
-            let iface_token = cr.register("net.openvpn.v3.backends", |b| {
-                b.method_with_cr_async(
-                    "Log",
-                    ("group", "level", "message"),
-                    (),
-                    |mut ctx, _cr, (_group, _level, _message): (u32, u32, String)| async move {
-                        ctx.reply(Ok(()))
-                    },
-                );
-
-                b.method_with_cr_async(
-                    "StatusChange",
-                    ("group", "level", "message"),
-                    (),
-                    |mut ctx, _cr, (_group, _level, _message): (u32, u32, String)| async move {
-                        ctx.reply(Ok(()))
-                    },
-                );
-
-                b.method_with_cr_async(
-                    "AttentionRequired",
-                    ("group", "level", "message"),
-                    (),
-                    |mut ctx, _cr, (_group, _level, _message): (u32, u32, String)| async move {
-                        ctx.reply(Ok(()))
-                    },
-                );
-            });
-
-            // Let's add the "/hello" path, which implements the com.example.dbustest interface,
-            // to the crossroads instance.
-            cr.insert(path, &[iface_token], State {});
-
-            println!("Server is ready to accept method calls.");
-
-            // We add the Crossroads instance to the connection so that incoming method calls will be handled.
-            conn.start_receive(
-                MatchRule::new_method_call(),
-                Box::new(move |msg, conn| {
-                    cr.handle_message(msg, conn).unwrap();
-                    true
-                }),
-            );
-
-            future::pending::<()>().await;
-            unreachable!()
-        });
-
-        Ok(())
     }
 
     pub async fn signals(&self) -> Result<(), Box<dyn Error + Send>> {
@@ -182,7 +115,6 @@ impl OpenVPN3Dbus {
             ) = signal_match.stream();
 
             while let Some(v) = stream.next().await {
-                println!("Signal received: {:?} {:?}", v.1, v.0);
                 let message = v.0;
                 let member = message.member().unwrap().into_static();
                 let member = member.as_str().unwrap().to_string();
@@ -218,7 +150,7 @@ impl OpenVPN3Dbus {
         let proxy = nonblock::Proxy::new(
             "net.openvpn.v3.configuration",
             dbus::Path::new(config_path).unwrap(),
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             conn,
         );
 
@@ -238,7 +170,7 @@ impl OpenVPN3Dbus {
         let proxy = nonblock::Proxy::new(
             "net.openvpn.v3.sessions",
             "/net/openvpn/v3/sessions",
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             conn,
         );
 
@@ -260,7 +192,7 @@ impl OpenVPN3Dbus {
         let proxy_session = nonblock::Proxy::new(
             "net.openvpn.v3.sessions",
             session_path.clone(),
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             session_conn,
         );
 
@@ -295,17 +227,6 @@ impl OpenVPN3Dbus {
             _ => (),
         };
 
-        let server = self
-            .server_status(session_path.clone().as_str().unwrap().to_string())
-            .await;
-
-        match server {
-            Ok(_) => (),
-            Err(_) => {
-                println!("Failed to start server");
-            }
-        }
-
         if let Ok(()) = proxy_session
             .method_call("net.openvpn.v3.sessions", "LogForward", (true,))
             .await
@@ -330,7 +251,7 @@ impl OpenVPN3Dbus {
             let log_proxy = nonblock::Proxy::new(
                 "net.openvpn.v3.log",
                 dbus::Path::new(log_path).unwrap(),
-                Duration::from_secs(2),
+                Duration::from_secs(5),
                 log_conn,
             );
 
@@ -353,7 +274,7 @@ impl OpenVPN3Dbus {
         let proxy = nonblock::Proxy::new(
             "net.openvpn.v3.configuration",
             dbus::Path::new(config_path).unwrap(),
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             conn,
         );
 
@@ -380,7 +301,7 @@ impl OpenVPN3Dbus {
         let proxy = nonblock::Proxy::new(
             "net.openvpn.v3.configuration",
             "/net/openvpn/v3/configuration",
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             conn,
         );
 
@@ -414,7 +335,7 @@ impl OpenVPN3Dbus {
         let proxy = nonblock::Proxy::new(
             "net.openvpn.v3.configuration",
             "/net/openvpn/v3/configuration",
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             conn,
         );
 
@@ -445,13 +366,13 @@ impl OpenVPN3Dbus {
         Ok(as_string)
     }
 
-    pub async fn get_sessions(&self) -> Result<Vec<String>, Box<dyn Error + Send>> {
+    pub async fn get_sessions(&self) -> Result<Vec<OpenVPN3Session>, Box<dyn Error + Send>> {
         let conn = self.connection.clone();
 
         let proxy = nonblock::Proxy::new(
             "net.openvpn.v3.sessions",
             "/net/openvpn/v3/sessions",
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             conn,
         );
 
@@ -462,12 +383,43 @@ impl OpenVPN3Dbus {
                 message: "Failed to fetch available sessions".to_string(),
             })?;
 
-        let sessions_as_strings = sessions
-            .iter()
-            .map(|s| s.to_string())
-            .collect::<Vec<String>>();
+        let mut sessions_with_data: Vec<OpenVPN3Session> = vec![];
 
-        Ok(sessions_as_strings)
+        for session in sessions.iter() {
+            let session_conn = self.connection.clone();
+            let session_proxy = nonblock::Proxy::new(
+                "net.openvpn.v3.sessions",
+                session.clone(),
+                Duration::from_secs(5),
+                session_conn,
+            );
+
+            let (major_code, minor_code, status_message): (u32, u32, String) = session_proxy
+                .get("net.openvpn.v3.sessions", "status")
+                .await
+                .map_err(|_| MyError {
+                    message: "Failed to fetch session data".to_string(),
+                })?;
+
+            let session_created: u64 = session_proxy
+                .get("net.openvpn.v3.sessions", "session_created")
+                .await
+                .map_err(|_| MyError {
+                    message: "Failed to fetch session data".to_string(),
+                })?;
+
+            let session = OpenVPN3Session {
+                path: session.to_string(),
+                major_code,
+                minor_code,
+                status_message,
+                session_created,
+            };
+
+            sessions_with_data.push(session);
+        }
+
+        Ok(sessions_with_data)
     }
 
     pub async fn disconnect_session(
@@ -479,7 +431,7 @@ impl OpenVPN3Dbus {
         let proxy = nonblock::Proxy::new(
             "net.openvpn.v3.sessions",
             dbus::Path::new(session_path).unwrap(),
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             conn,
         );
 
@@ -502,7 +454,7 @@ impl OpenVPN3Dbus {
         let proxy = nonblock::Proxy::new(
             "net.openvpn.v3.sessions",
             dbus::Path::new(session_path).unwrap(),
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             conn,
         );
 

@@ -7,7 +7,11 @@ export type Config = {
 };
 
 export type Session = {
-  path: string;
+  path: string,
+  major_code: number,
+  minor_code: number,
+  status_message: string,
+  session_created: number,
 };
 
 type LocalConfigsState = {

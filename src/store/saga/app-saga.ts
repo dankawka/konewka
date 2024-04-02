@@ -1,5 +1,10 @@
 import { invoke } from "@tauri-apps/api";
 import { listen } from "@tauri-apps/api/event";
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from "@tauri-apps/api/notification";
 import { call, fork, put, take, takeLatest } from "redux-saga/effects";
 import { channel } from "redux-saga";
 import {
@@ -10,6 +15,7 @@ import {
   invokeNewTunnel,
   invokeDisconnectSession,
   invokeConnectSession,
+  setNotificationsEnabled,
 } from "../features/common/common";
 import { ImportConfigurationPayload } from "../../common/types";
 import {
@@ -22,15 +28,51 @@ import { Log, addLog } from "../features/logs/logs";
 
 const logsChannel = channel();
 
+const checkNotifPermission = async () => {
+  const permissionGranted = await isPermissionGranted();
+  if (!permissionGranted) {
+    const permission = await requestPermission();
+    return permission === "granted";
+  }
+  return true;
+};
+
+function* processLog(log: Log) {
+  if (log.member === "StatusChange" && log.second_flag === 7) {
+    sendNotification({
+      title: "Konewka",
+      body: "Connected to VPN!",
+    })
+  }
+
+  if (log.member === "StatusChange" && log.second_flag === 9) {
+    sendNotification({
+      title: "Konewka",
+      body: "VPN disconnected!",
+    })
+  }
+}
+
 function* init() {
   const configs: Config[] = yield call(invoke, "get_openvpn3_configs");
   yield put(initializeConfigs(configs));
 
-  const sessions = (yield call(invoke, "get_openvpn3_sessions")) as string[];
-  const sessionsAsObjects: Session[] = sessions.map((session) => ({
-    path: session,
-  }));
-  yield put(initializeSessions(sessionsAsObjects));
+  const sessions = (yield call(invoke, "get_openvpn3_sessions")) as Session[];
+  yield put(initializeSessions(sessions));
+
+  for (const session of sessions) {
+    const firstLog: Log = {
+      member: "StatusChange",
+      first_flag: session.major_code,
+      second_flag: session.minor_code,
+      message: session.status_message,
+    };
+
+    yield put(addLog(firstLog));
+  }
+
+  const permissionGranted: boolean = yield call(checkNotifPermission);
+  yield put(setNotificationsEnabled(permissionGranted));
 }
 
 function* registerEvents() {
@@ -110,6 +152,7 @@ function* watchLogs() {
   while (true) {
     const log: Log = yield take(logsChannel);
     yield put(addLog(log));
+    yield processLog(log);
   }
 }
 

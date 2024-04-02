@@ -1,9 +1,10 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{sync::Arc};
+use std::sync::Arc;
 
-use dbus::openvpn3::{OpenVPN3Config, OpenVPN3Dbus};
+use dbus::openvpn3::{OpenVPN3Config, OpenVPN3Dbus, OpenVPN3Session};
+
 use serde::{Deserialize, Serialize};
 use tauri::{CustomMenuItem, Manager, SystemTray, SystemTrayMenu, SystemTrayMenuItem};
 mod dbus;
@@ -56,8 +57,8 @@ fn select_file() -> Result<String, String> {
     }
 }
 
-#[serde(rename_all = "camelCase")]
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 struct ImportConfigPayload {
     config_name: String,
     single_use: bool,
@@ -80,7 +81,9 @@ async fn import_openvpn3_config<'a>(
 }
 
 #[tauri::command]
-async fn get_openvpn3_sessions<'a>(state: tauri::State<'a, MyState>) -> Result<Vec<String>, ()> {
+async fn get_openvpn3_sessions<'a>(
+    state: tauri::State<'a, MyState>,
+) -> Result<Vec<OpenVPN3Session>, ()> {
     let sessions = match state.0.get_sessions().await {
         Ok(configs) => configs,
         Err(error) => {
