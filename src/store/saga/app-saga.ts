@@ -16,8 +16,10 @@ import {
   invokeDisconnectSession,
   invokeConnectSession,
   setNotificationsEnabled,
+  setCurrentModal,
+  invokeConfirmExit,
 } from "../features/common/common";
-import { ImportConfigurationPayload } from "../../common/types";
+import { FromMainAction, ImportConfigurationPayload } from "../../common/types";
 import {
   Config,
   Session,
@@ -27,6 +29,7 @@ import {
 import { Log, addLog } from "../features/logs/logs";
 
 const logsChannel = channel();
+const fromMainChannel = channel<FromMainAction>();
 
 const checkNotifPermission = async () => {
   const permissionGranted = await isPermissionGranted();
@@ -42,14 +45,14 @@ function* processLog(log: Log) {
     sendNotification({
       title: "Konewka",
       body: "Connected to VPN!",
-    })
+    });
   }
 
   if (log.member === "StatusChange" && log.second_flag === 9) {
     sendNotification({
       title: "Konewka",
       body: "VPN disconnected!",
-    })
+    });
   }
 }
 
@@ -78,6 +81,13 @@ function* init() {
 function* registerEvents() {
   yield call(listen<Log>, "log", (event) => {
     logsChannel.put(event.payload);
+  });
+
+  yield call(listen, "exit_confirmation", () => {
+    fromMainChannel.put({
+      type: "exit_confirmation",
+      data: null,
+    });
   });
 }
 
@@ -156,8 +166,23 @@ function* watchLogs() {
   }
 }
 
+function* watchActions() {
+  while (true) {
+    const action: FromMainAction = yield take(fromMainChannel);
+
+    if (action.type === "exit_confirmation") {
+      yield put(setCurrentModal("exit_confirmation"));
+    }
+  }
+}
+
+function* handleInvokeConfirmExit() {
+  yield call(invoke, "exit_app");
+}
+
 function* appSaga() {
   yield fork(watchLogs);
+  yield fork(watchActions);
 
   yield registerEvents();
   yield init();
@@ -174,6 +199,7 @@ function* appSaga() {
   yield takeLatest(invokeNewTunnel.type, handleInvokeNewTunnel);
   yield takeLatest(invokeDisconnectSession.type, handleInvokeDisconnectSession);
   yield takeLatest(invokeConnectSession.type, handleInvokeConnectSession);
+  yield takeLatest(invokeConfirmExit.type, handleInvokeConfirmExit);
 }
 
 export default appSaga;

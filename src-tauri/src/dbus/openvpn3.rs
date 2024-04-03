@@ -2,37 +2,21 @@ use anyhow::{Context, Result};
 use dbus::arg::RefArg;
 use dbus::message::MatchRule;
 use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
-use dbus::nonblock::SyncConnection;
-use dbus::nonblock::{self};
+use dbus::nonblock::{self, SyncConnection};
 use dbus::Path;
 use dbus_tokio::connection;
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::{error::Error, time::Duration};
+use std::time::Duration;
 use tokio::sync::{broadcast, Mutex};
 use tokio_stream::StreamExt;
 
-use crate::ImportConfigPayload;
+use crate::structs::ImportConfigPayload;
+
+use super::structs::{OpenVPN3Config, OpenVPN3Session};
 
 pub struct OpenVPN3Dbus {
     connection: Arc<SyncConnection>,
     log_sender: broadcast::Sender<(String, u32, u32, String)>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct OpenVPN3Config {
-    pub path: String,
-    pub name: String,
-    pub used_count: u32,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct OpenVPN3Session {
-    pub path: String,
-    pub major_code: u32,
-    pub minor_code: u32,
-    pub status_message: String,
-    pub session_created: u64,
 }
 
 impl OpenVPN3Dbus {
@@ -197,30 +181,6 @@ impl OpenVPN3Dbus {
             println!("Failed to forward logs");
         }
 
-        if let Ok(data) = proxy_session.get_all("net.openvpn.v3.sessions").await {
-            let log_forwards = data.get("log_forwards").unwrap();
-            let log_path = log_forwards
-                .0
-                .as_iter()
-                .unwrap()
-                .next()
-                .unwrap()
-                .as_str()
-                .unwrap();
-
-            let log_conn = self.connection.clone();
-            let log_proxy = nonblock::Proxy::new(
-                "net.openvpn.v3.log",
-                dbus::Path::new(log_path).unwrap(),
-                Duration::from_secs(5),
-                log_conn,
-            );
-
-            if let Ok(data) = log_proxy.get_all("net.openvpn.v3.log").await {
-                println!("LogForwarded: {:?}", data);
-            }
-        }
-
         let session_path_as_string = session_path.to_string();
 
         Ok(session_path_as_string)
@@ -340,16 +300,6 @@ impl OpenVPN3Dbus {
                 session_conn,
             );
 
-            // Forward logs frome each session
-            if let Ok(()) = session_proxy
-                .method_call("net.openvpn.v3.sessions", "LogForward", (true,))
-                .await
-            {
-                println!("LogForwarded");
-            } else {
-                println!("Failed to forward logs");
-            }
-
             let (major_code, minor_code, status_message): (u32, u32, String) = session_proxy
                 .get("net.openvpn.v3.sessions", "status")
                 .await
@@ -372,6 +322,28 @@ impl OpenVPN3Dbus {
         }
 
         Ok(sessions_with_data)
+    }
+
+    pub async fn has_session(&self) -> Result<bool, anyhow::Error> {
+        let conn = self.connection.clone();
+
+        let proxy = nonblock::Proxy::new(
+            "net.openvpn.v3.sessions",
+            "/net/openvpn/v3/sessions",
+            Duration::from_secs(5),
+            conn,
+        );
+
+        let (sessions,): (Vec<Path>,) = proxy
+            .method_call("net.openvpn.v3.sessions", "FetchAvailableSessions", ())
+            .await
+            .with_context(|| "Failed to fetch available sessions")?;
+
+        if sessions.is_empty() {
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 
     pub async fn disconnect_session(&self, session_path: String) -> Result<(), anyhow::Error> {
@@ -406,6 +378,16 @@ impl OpenVPN3Dbus {
             .method_call("net.openvpn.v3.sessions", "Connect", ())
             .await
             .with_context(|| "Failed to connect session")?;
+
+        Ok(())
+    }
+
+    pub async fn disconnect_all(&self) -> Result<(), anyhow::Error> {
+        let sessions = self.get_sessions().await?;
+
+        for session in sessions.iter() {
+            self.disconnect_session(session.path.clone()).await?;
+        }
 
         Ok(())
     }
