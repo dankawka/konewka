@@ -16,7 +16,7 @@ use super::structs::{OpenVPN3Config, OpenVPN3Session};
 
 pub struct OpenVPN3Dbus {
     connection: Arc<SyncConnection>,
-    log_sender: broadcast::Sender<(String, u32, u32, String)>,
+    log_sender: broadcast::Sender<(String, String, u32, u32, String)>,
 }
 
 impl OpenVPN3Dbus {
@@ -28,7 +28,7 @@ impl OpenVPN3Dbus {
             panic!("Lost connection to D-Bus: {}", err);
         });
 
-        let (tx_log, _) = broadcast::channel::<(String, u32, u32, String)>(16);
+        let (tx_log, _) = broadcast::channel::<(String, String, u32, u32, String)>(16);
 
         Ok(Self {
             connection: conn,
@@ -38,14 +38,14 @@ impl OpenVPN3Dbus {
 
     pub fn on_log<F>(&self, callback: F)
     where
-        F: Fn(String, u32, u32, String) + Send + 'static,
+        F: Fn(String, String, u32, u32, String) + Send + 'static,
     {
         let mut rx = self.log_sender.subscribe();
         let cb = Arc::new(Mutex::new(callback));
 
         tokio::spawn(async move {
-            while let Ok((member, group, level, message)) = rx.recv().await {
-                cb.lock().await(member, group, level, message);
+            while let Ok((path, member, group, level, message)) = rx.recv().await {
+                cb.lock().await(path, member, group, level, message);
             }
         });
     }
@@ -73,8 +73,16 @@ impl OpenVPN3Dbus {
                 let member = message.member().unwrap().into_static();
                 let member = member.as_str().unwrap().to_string();
 
+                let path = message.path().unwrap().into_static();
+
                 let (first_code, second_code, message) = v.1;
-                let payload = (member.clone(), first_code, second_code, message.clone());
+                let payload = (
+                    path.to_string(),
+                    member.clone(),
+                    first_code,
+                    second_code,
+                    message.clone(),
+                );
 
                 let cmember = member.clone();
                 if cmember == "StatusChange" && first_code == 3 && second_code == 22 {

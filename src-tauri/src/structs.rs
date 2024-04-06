@@ -11,6 +11,7 @@ pub struct ImportConfigPayload {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LogMessage {
+    pub path: String,
     pub member: String,
     pub first_flag: u32,
     pub second_flag: u32,

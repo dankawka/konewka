@@ -41,8 +41,7 @@ async fn main() {
     }
 
     let openvpn3_logger = openvpn3.clone();
-
-    let openvpn3c = openvpn3.clone();
+    let openvpn3_window_events = openvpn3.clone();
 
     let app = tauri::Builder::default()
         .manage(MyState { openvpn3: openvpn3 })
@@ -62,12 +61,12 @@ async fn main() {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
 
-                    let openvpn3c = openvpn3c.clone();
+                    let openvpn3_window_events = openvpn3_window_events.clone();
                     let window_event = window_event.clone();
                     let main_window = window.clone();
 
                     tokio::spawn(async move {
-                        if !openvpn3c.has_session().await.unwrap() {
+                        if !openvpn3_window_events.has_session().await.unwrap() {
                             window_event.close().unwrap();
                         } else {
                             main_window
@@ -78,8 +77,9 @@ async fn main() {
                 }
             });
 
-            openvpn3_logger.on_log(move |member, group, level, message| {
+            openvpn3_logger.on_log(move |path, member, group, level, message| {
                 let message = LogMessage {
+                    path: path,
                     member: member,
                     first_flag: group,
                     second_flag: level,
@@ -105,5 +105,5 @@ async fn main() {
         .build(tauri::generate_context!())
         .unwrap();
 
-    app.run(move |app_handle, event| {});
+    app.run(move |_, _| {});
 }

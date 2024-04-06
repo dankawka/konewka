@@ -22,13 +22,15 @@ import {
 import { FromMainAction, ImportConfigurationPayload } from "../../common/types";
 import {
   Config,
+  LastSessionStatusPayload,
   Session,
   initializeConfigs,
   initializeSessions,
+  updateSessionStatus,
 } from "../features/local-configs/local-configs";
 import { Log, addLog } from "../features/logs/logs";
 
-const logsChannel = channel();
+const logsChannel = channel<Log>();
 const fromMainChannel = channel<FromMainAction>();
 
 const checkNotifPermission = async () => {
@@ -54,6 +56,16 @@ function* processLog(log: Log) {
       body: "VPN disconnected!",
     });
   }
+
+  if (log.member === "StatusChange") {
+    const session: LastSessionStatusPayload = {
+      path: log.path,
+      major_code: log.first_flag,
+      minor_code: log.second_flag,
+      status_message: log.message,
+    };
+    yield put(updateSessionStatus(session));
+  }
 }
 
 function* init() {
@@ -65,6 +77,7 @@ function* init() {
 
   for (const session of sessions) {
     const firstLog: Log = {
+      path: session.path,
       member: "StatusChange",
       first_flag: session.major_code,
       second_flag: session.minor_code,
