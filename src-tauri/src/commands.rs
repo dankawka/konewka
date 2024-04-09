@@ -1,31 +1,29 @@
+use std::pin::Pin;
+
+use futures::Future;
+
 use crate::{
     dbus::structs::{OpenVPN3Config, OpenVPN3Session},
     structs::ImportConfigPayload,
-    MyState,
+    utils, MyState,
 };
 
 #[tauri::command]
-pub async fn get_openvpn3_configs<'a>(
-    state: tauri::State<'a, MyState>,
+pub async fn get_openvpn3_configs(
+    state: tauri::State<'_, MyState>,
 ) -> Result<Vec<OpenVPN3Config>, ()> {
-    let configs = match state.openvpn3.get_configs().await {
-        Ok(configs) => configs,
-        Err(error) => {
-            let mut retry = 0;
-            loop {
-                println!("Failed to get configs, retrying...");
-                println!("Error: {:?}", error);
-                if retry == 3 {
-                    return Ok(vec![]);
-                }
-                match state.openvpn3.get_configs().await {
-                    Ok(configs) => break configs,
-                    Err(_) => retry += 1,
-                }
+    let openvpn3 = state.openvpn3.clone();
 
-                // Wait for 1 second before retrying
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            }
+    let closure = move || {
+        let openvpn3 = openvpn3.clone();
+        Box::pin(async move { openvpn3.get_configs().await })
+            as Pin<Box<dyn Future<Output = Result<Vec<OpenVPN3Config>, anyhow::Error>> + Send>>
+    };
+
+    let configs = match utils::async_retry(closure, 5).await {
+        Ok(configs) => configs,
+        Err(_) => {
+            return Ok(vec![]);
         }
     };
     Ok(configs)
@@ -68,54 +66,39 @@ pub async fn import_openvpn3_config<'a>(
 pub async fn get_openvpn3_sessions<'a>(
     state: tauri::State<'a, MyState>,
 ) -> Result<Vec<OpenVPN3Session>, ()> {
-    let sessions = match state.openvpn3.get_sessions().await {
-        Ok(configs) => configs,
-        Err(error) => {
-            let mut retry = 0;
-            loop {
-                println!("Failed to get sessions, retrying...");
-                println!("Error: {:?}", error);
-                if retry == 3 {
-                    return Ok(vec![]);
-                }
-                match state.openvpn3.get_sessions().await {
-                    Ok(sessions) => break sessions,
-                    Err(_) => retry += 1,
-                }
+    let openvpn3 = state.openvpn3.clone();
 
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            }
-        }
+    let to_retry = move || {
+        let openvpn3 = openvpn3.clone();
+
+        Box::pin(async move { openvpn3.get_sessions().await })
+            as Pin<Box<dyn Future<Output = Result<Vec<OpenVPN3Session>, anyhow::Error>> + Send>>
     };
-    Ok(sessions)
+
+    if let Ok(sessions) = utils::async_retry(to_retry, 3).await {
+        return Ok(sessions);
+    } else {
+        return Err(());
+    };
 }
 
 #[tauri::command]
-pub async fn remove_config<'a>(
-    payload: String,
-    state: tauri::State<'a, MyState>,
-) -> Result<(), ()> {
-    match state.openvpn3.remove_config(payload.clone()).await {
-        Ok(configs) => configs,
-        Err(error) => {
-            let mut retry = 0;
-            loop {
-                println!("Failed to remove config, retrying...");
-                println!("Error: {:?}", error);
-                if retry == 3 {
-                    return Ok(());
-                }
-                match state.openvpn3.remove_config(payload.clone()).await {
-                    Ok(sessions) => break sessions,
-                    Err(_) => retry += 1,
-                }
+pub async fn remove_config(payload: String, state: tauri::State<'_, MyState>) -> Result<(), ()> {
+    let openvpn3 = state.openvpn3.clone();
 
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            }
-        }
+    let to_retry = move || {
+        let openvpn3 = openvpn3.clone();
+        let payload = payload.clone();
+
+        Box::pin(async move { openvpn3.remove_config(payload.clone()).await })
+            as Pin<Box<dyn Future<Output = Result<(), anyhow::Error>> + Send>>
     };
 
-    Ok(())
+    if let Ok(_) = utils::async_retry(to_retry, 3).await {
+        return Ok(());
+    } else {
+        return Err(());
+    };
 }
 
 #[tauri::command]

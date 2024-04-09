@@ -15,6 +15,7 @@ use tauri::{CustomMenuItem, Manager, SystemTray, SystemTrayMenu, SystemTrayMenuI
 mod commands;
 mod dbus;
 mod structs;
+mod utils;
 
 struct MyState {
     openvpn3: Arc<OpenVPN3Dbus>,

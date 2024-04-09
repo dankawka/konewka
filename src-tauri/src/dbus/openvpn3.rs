@@ -5,12 +5,15 @@ use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
 use dbus::nonblock::{self, SyncConnection};
 use dbus::Path;
 use dbus_tokio::connection;
+use futures::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, Mutex};
 use tokio_stream::StreamExt;
 
 use crate::structs::ImportConfigPayload;
+use crate::utils;
 
 use super::structs::{OpenVPN3Config, OpenVPN3Session};
 
@@ -151,34 +154,22 @@ impl OpenVPN3Dbus {
             session_conn,
         );
 
-        let result: Result<(), dbus::Error> = proxy
-            .method_call("net.openvpn.v3.sessions", "Ready", ())
-            .await;
-
-        let _ = match result {
-            Err(_) => {
-                let mut retry = 0;
-                loop {
-                    println!("Failed to ready session, retrying...");
-                    if retry == 3 {
-                        return Err(anyhow::Error::msg("Failed to ready session"));
-                    }
-                    match proxy_session
-                        .method_call("net.openvpn.v3.sessions", "Ready", ())
-                        .await
-                    {
-                        Ok(()) => {
-                            println!("Session ready");
-                            break;
-                        }
-                        Err(_) => retry += 1,
-                    };
-
-                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                }
-            }
-            _ => (),
+        let proxy = proxy_session.clone();
+        let closure = move || {
+            let proxy = proxy.clone();
+            Box::pin(async move {
+                let result: Result<(), dbus::Error> = proxy
+                    .method_call("net.openvpn.v3.sessions", "Ready", ())
+                    .await;
+                return result;
+            }) as Pin<Box<dyn Future<Output = Result<_, dbus::Error>> + Send>>
         };
+
+        if let Ok(_) = utils::async_retry(closure, 5).await {
+            println!("Tunnel is ready");
+        } else {
+            return Err(anyhow::anyhow!("Failed to create tunnel"));
+        }
 
         if let Ok(()) = proxy_session
             .method_call("net.openvpn.v3.sessions", "LogForward", (true,))
