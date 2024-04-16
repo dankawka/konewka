@@ -7,10 +7,10 @@ use dbus::openvpn3::OpenVPN3Dbus;
 
 use commands::{
     connect_session, disconnect_session, exit_app, get_openvpn3_configs, get_openvpn3_sessions,
-    import_openvpn3_config, new_tunnel, remove_config, select_file,
+    import_openvpn3_config, minimize_to_tray, new_tunnel, remove_config, select_file,
 };
 use structs::LogMessage;
-use tauri::{CustomMenuItem, Manager, SystemTray, SystemTrayMenu, SystemTrayMenuItem};
+use tauri::{CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu};
 
 mod commands;
 mod dbus;
@@ -23,12 +23,8 @@ struct MyState {
 
 #[tokio::main]
 async fn main() {
-    let quit = CustomMenuItem::new("quit".to_string(), "Quit");
-    let hide = CustomMenuItem::new("hide".to_string(), "Hide");
-    let tray_menu = SystemTrayMenu::new()
-        .add_item(quit)
-        .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(hide);
+    let show = CustomMenuItem::new("show".to_string(), "Show");
+    let tray_menu = SystemTrayMenu::new().add_item(show);
     let tray = SystemTray::new().with_menu(tray_menu);
 
     let openvpn3 = Arc::new(dbus::openvpn3::OpenVPN3Dbus::new().unwrap());
@@ -55,7 +51,6 @@ async fn main() {
 
             let main_window = app.get_window("main").unwrap();
 
-            let window_event = main_window.clone();
             let window = main_window.clone();
 
             main_window.on_window_event(move |event| {
@@ -63,16 +58,13 @@ async fn main() {
                     api.prevent_close();
 
                     let openvpn3_window_events = openvpn3_window_events.clone();
-                    let window_event = window_event.clone();
                     let main_window = window.clone();
 
                     tokio::spawn(async move {
                         if !openvpn3_window_events.has_session().await.unwrap() {
-                            window_event.close().unwrap();
+                            main_window.emit("exit_confirmation", false).unwrap();
                         } else {
-                            main_window
-                                .emit("exit_confirmation", "".to_string())
-                                .unwrap();
+                            main_window.emit("exit_confirmation", true).unwrap();
                         }
                     });
                 }
@@ -92,6 +84,16 @@ async fn main() {
             Ok(())
         })
         .system_tray(tray)
+        .on_system_tray_event(|app, event| match event {
+            SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
+                "show" => {
+                    let window = app.get_window("main").unwrap();
+                    window.show().unwrap();
+                }
+                _ => {}
+            },
+            _ => {}
+        })
         .invoke_handler(tauri::generate_handler![
             get_openvpn3_configs,
             select_file,
@@ -101,7 +103,8 @@ async fn main() {
             new_tunnel,
             disconnect_session,
             connect_session,
-            exit_app
+            exit_app,
+            minimize_to_tray,
         ])
         .build(tauri::generate_context!())
         .unwrap();

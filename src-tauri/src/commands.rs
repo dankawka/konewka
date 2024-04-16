@@ -158,3 +158,9 @@ pub async fn exit_app<'a>(
     app_handle.exit(0);
     Ok("Exiting".to_string())
 }
+
+#[tauri::command]
+pub async fn minimize_to_tray(window: tauri::Window) -> Result<String, String> {
+    window.hide().unwrap();
+    Ok("Minimizng".to_string())
+}

@@ -14,3 +14,5 @@ export type FromMainAction = {
     type: MainAction,
     data: unknown;
 }
+
+export type ExitConfirmationPayload = boolean;

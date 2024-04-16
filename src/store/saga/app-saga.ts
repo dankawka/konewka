@@ -18,8 +18,10 @@ import {
   setNotificationsEnabled,
   setCurrentModal,
   invokeConfirmExit,
+  setHasActiveSession,
+  invokeMinimizeToTray,
 } from "../features/common/common";
-import { FromMainAction, ImportConfigurationPayload } from "../../common/types";
+import { ExitConfirmationPayload, FromMainAction, ImportConfigurationPayload } from "../../common/types";
 import {
   Config,
   LastSessionStatusPayload,
@@ -96,10 +98,10 @@ function* registerEvents() {
     logsChannel.put(event.payload);
   });
 
-  yield call(listen, "exit_confirmation", () => {
+  yield call(listen<ExitConfirmationPayload>, "exit_confirmation", (event) => {
     fromMainChannel.put({
       type: "exit_confirmation",
-      data: null,
+      data: event.payload
     });
   });
 }
@@ -184,6 +186,8 @@ function* watchActions() {
     const action: FromMainAction = yield take(fromMainChannel);
 
     if (action.type === "exit_confirmation") {
+      // Data is a boolean value that indicates if there are any active sessions
+      yield put(setHasActiveSession(action.data));
       yield put(setCurrentModal("exit_confirmation"));
     }
   }
@@ -191,6 +195,10 @@ function* watchActions() {
 
 function* handleInvokeConfirmExit() {
   yield call(invoke, "exit_app");
+}
+
+function* handleInvokeMinimizeToTray() {
+  yield call(invoke, "minimize_to_tray");
 }
 
 function* appSaga() {
@@ -213,6 +221,7 @@ function* appSaga() {
   yield takeLatest(invokeDisconnectSession.type, handleInvokeDisconnectSession);
   yield takeLatest(invokeConnectSession.type, handleInvokeConnectSession);
   yield takeLatest(invokeConfirmExit.type, handleInvokeConfirmExit);
+  yield takeLatest(invokeMinimizeToTray.type, handleInvokeMinimizeToTray);
 }
 
 export default appSaga;

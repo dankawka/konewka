@@ -6,12 +6,14 @@ type CommonState = {
   configurationPathToImport: string;
   notificationsEnabled: boolean;
   currentModal: Modals;
+  hasActiveSession: boolean;
 };
 
 const initialState: CommonState = {
   configurationPathToImport: "",
   notificationsEnabled: false,
   currentModal: null,
+  hasActiveSession: false,
 };
 
 export const commonSlice = createSlice({
@@ -27,6 +29,9 @@ export const commonSlice = createSlice({
     setCurrentModal: (state, action) => {
       state.currentModal = action.payload;
     },
+    setHasActiveSession: (state, action) => {
+      state.hasActiveSession = action.payload;
+    },
   },
 });
 
@@ -34,6 +39,7 @@ export const {
   setConfigurationPathToImport,
   setNotificationsEnabled,
   setCurrentModal,
+  setHasActiveSession,
 } = commonSlice.actions;
 
 export const invokeSelectFile = createAction("common/invokeSelectFile");
@@ -51,10 +57,14 @@ export const invokeConnectSession = createAction<string>(
 );
 
 export const invokeConfirmExit = createAction("common/invokeConfirmExit");
+export const invokeMinimizeToTray = createAction("common/invokeMinimizeToTray");
 
 export const getConfigurationPathToImport = (state: RootState) =>
   state.common.configurationPathToImport;
 
 export const getCurrentModal = (state: RootState) => state.common.currentModal;
+
+export const getHasActiveSession = (state: RootState) =>
+  state.common.hasActiveSession;
 
 export default commonSlice.reducer;
